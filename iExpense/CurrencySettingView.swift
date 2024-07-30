@@ -41,6 +41,7 @@ struct CurrencySettingView: View {
                             Spacer()
                             TextField("currency rate", value: $currency, format: .number.precision(.fractionLength(2)))
                                 .frame(maxWidth: 60)
+                                .keyboardType(.decimalPad)
                         }
                     }
                 }
