@@ -66,8 +66,20 @@ struct Currency: Identifiable, Codable {
 
 @Observable
 class CurrencySetting {
-    var settings = [Currency]()
+    var settings = [Currency]() {
+        didSet {
+            if let encoded = try? JSONEncoder().encode(settings) {
+                UserDefaults.standard.set(encoded, forKey: "ExchangeRate")
+            }
+        }
+    }
     init() {
+        if let saveCurrency = UserDefaults.standard.data(forKey: "ExchangeRate") {
+            if let decodedCurrency = try? JSONDecoder().decode([Currency].self, from: saveCurrency) {
+                settings = decodedCurrency
+                return
+            }
+        }
         settings = [
             Currency(id: "USD", rate: 1),
             Currency(id: "TWD", rate: 32.88),
@@ -80,13 +92,15 @@ class CurrencySetting {
 struct ContentView: View {
     @State private var expenseMap = ExpneseMap()
     @State private var showingAddExpense = false
-    @State private var previewCurrency = "TWD"
     @State private var currencySetting = CurrencySetting()
     
+    @AppStorage("PreviewCurrency") var previewCurrency: String = "TWD"
+
+    var totalAmount: Double {
+        calculateTotal()
+    }
     let currencyCodes = ["USD", "TWD", "AUD", "CNY"]
     
-    
-
     var body: some View {
         NavigationStack {
             List {
@@ -100,21 +114,18 @@ struct ContentView: View {
                         Text("Total Amount: ")
                             .font(.largeTitle)
                             .fontWeight(.bold)
-                        Text(100.2, format: .currency(code: previewCurrency))
+                        Text(totalAmount, format: .currency(code: previewCurrency))
                             .font(.largeTitle)
                             .fontWeight(.semibold)
                     }
                     .frame(height: /*@START_MENU_TOKEN@*/100/*@END_MENU_TOKEN@*/)
                 }
                 ForEach(Array(expenseMap.expenses.keys), id: \.self){ key in
-                    Section {
+                    Section(key) {
                         ForEach(expenseMap.expenses[key] ?? []){ item in
                             HStack {
-                                VStack(alignment: .leading) {
-                                    Text(item.name)
-                                        .font(.headline)
-                                    Text(item.type)
-                                }
+                                Text(item.name)
+                                    .font(.headline)
                                 Spacer()
                                 Text(item.amount, format: .currency(code: item.currencyCode))
                                     .Price(price: item.amount)
@@ -150,8 +161,31 @@ struct ContentView: View {
         expenseMap.expenses[type]?.remove(atOffsets: offset)
     }
     
-    func calculateTotal() {
-        
+    func calculateTotal() -> Double{
+        var usd = 0.0
+        // 先換成美金，再換成目標貨幣
+        for key in expenseMap.expenses.keys {
+            if let items = expenseMap.expenses[key] {
+                for item in items {
+                    for currency in currencySetting.settings {
+                        if currency.id == item.currencyCode {
+                            usd += item.amount/currency.rate
+                            break
+                        }
+                    }
+                }
+            }
+        }
+        if previewCurrency == "USD" {
+            return usd
+        } else {
+            for currency in currencySetting.settings {
+                if previewCurrency == currency.id {
+                    return usd * currency.rate
+                }
+            }
+        }
+        return usd
     }
 }
 
